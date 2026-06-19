@@ -23,8 +23,8 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'procurement_officer', 'manager', 'vendor'],
-      default: 'procurement_officer',
+      enum: ['admin', 'officer', 'manager', 'vendor'],
+      default: 'officer',
     },
     vendorProfile: {
       type: mongoose.Schema.Types.ObjectId,

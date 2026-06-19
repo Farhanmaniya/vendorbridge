@@ -3,6 +3,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const authRoutes = require("./routes/auth.routes");
 const vendorRoutes = require("./routes/vendor.routes");
+const RFQRoutes = require('./routes/rfq.routes');
 
 const app = express();
 
@@ -18,5 +19,6 @@ app.get('/api/health', (req, res) => {
 });
 app.use('/api/auth', authRoutes);
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/rfq', RFQRoutes);
 
 module.exports = app;
