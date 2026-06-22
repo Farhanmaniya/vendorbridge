@@ -1,5 +1,7 @@
 const Vendor = require("../models/Vendor.model");
 const RFQ = require("../models/RFQ.model");
+const User = require("../models/User.model");
+const Notification = require("../models/Notification.model");
 
 const validTransitions = {
   draft: {
@@ -130,6 +132,62 @@ const updateRFQStatus = async (req, res) => {
       { new: true },
     );
 
+    if (newStatus === "published") {
+      const vendorIds = rfq.vendors.map((v) => v.vendor);
+      const vendors = await Vendor.find({ _id: { $in: vendorIds } });
+
+      const notifications = vendors.map((vendor) => ({
+        userId: vendor.userId,
+        type: "rfq_published",
+        message: `RFQ ${rfq.rfqNumber} has been published`,
+        relatedId: rfq._id,
+        relatedModel: "RFQ",
+      }));
+
+      await Notification.insertMany(notifications);
+    }
+    if (newStatus === "closed") {
+      const staff = await User.find({ role: { $in: ["officer", "manager"] } });
+
+      const notifications = staff.map((s) => ({
+        userId: s._id,
+        type: "rfq_closed",
+        message: `RFQ ${rfq.rfqNumber} has been closed`,
+        relatedId: rfq._id,
+        relatedModel: "RFQ",
+      }));
+
+      await Notification.insertMany(notifications);
+    }
+
+    if (newStatus === "cancelled") {
+      const staff = await User.find({ role: { $in: ["officer", "manager"] } });
+
+      const staffNotifications = staff.map((s) => ({
+        userId: s._id,
+        type: "rfq_cancelled",
+        message: `RFQ ${rfq.rfqNumber} has been cancelled`,
+        relatedId: rfq._id,
+        relatedModel: "RFQ",
+      }));
+
+      await Notification.insertMany(staffNotifications);
+
+      if (currentStatus === "published") {
+        const vendorIds = rfq.vendors.map((v) => v.vendor);
+        const vendors = await Vendor.find({ _id: { $in: vendorIds } });
+
+        const notificationsVendor = vendors.map((vendor) => ({
+          userId: vendor.userId,
+          type: "rfq_cancelled",
+          message: `RFQ ${rfq.rfqNumber} has been cancelled`,
+          relatedId: rfq._id,
+          relatedModel: "RFQ",
+        }));
+
+        await Notification.insertMany(notificationsVendor);
+      }
+    }
     return res.status(200).json({ message: "Status changed", updatedRFQ });
   } catch (error) {
     return res.status(500).json({ message: "Internal Server Error" });
@@ -137,30 +195,40 @@ const updateRFQStatus = async (req, res) => {
 };
 
 const updateRFQ = async (req, res) => {
-    try {
-        const rfq = await RFQ.findById(req.params.id);
-        if (!rfq) {
-            return res.status(404).json({ message: 'RFQ Not Found' });
-        }
-
-        if (rfq.status !== 'draft') {
-            return res.status(400).json({ message: 'Status is not draft Not allowed to change' });
-        }
-
-        const { items, vendors, budget, deadline, category } = req.body;
-        
-        if (deadline) rfq.deadline = deadline;
-        if (category) rfq.category = category;
-        if (budget) rfq.budget = budget;
-        if (items) rfq.items = items;
-        if (vendors) rfq.vendors = vendors;
-
-        const updatedRFQ = await rfq.save();
-
-        return res.status(200).json({ message: 'RFQ updated Successfully', updatedRFQ});
-    } catch (error) { 
-        return res.status(500).json({ message: 'Internal Server Error' });
+  try {
+    const rfq = await RFQ.findById(req.params.id);
+    if (!rfq) {
+      return res.status(404).json({ message: "RFQ Not Found" });
     }
+
+    if (rfq.status !== "draft") {
+      return res
+        .status(400)
+        .json({ message: "Status is not draft Not allowed to change" });
+    }
+
+    const { items, vendors, budget, deadline, category } = req.body;
+
+    if (deadline) rfq.deadline = deadline;
+    if (category) rfq.category = category;
+    if (budget) rfq.budget = budget;
+    if (items) rfq.items = items;
+    if (vendors) rfq.vendors = vendors;
+
+    const updatedRFQ = await rfq.save();
+
+    return res
+      .status(200)
+      .json({ message: "RFQ updated Successfully", updatedRFQ });
+  } catch (error) {
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
 };
 
-module.exports = { createRFQ, getAllRFQs, getRFQById, updateRFQStatus , updateRFQ};
+module.exports = {
+  createRFQ,
+  getAllRFQs,
+  getRFQById,
+  updateRFQStatus,
+  updateRFQ,
+};
