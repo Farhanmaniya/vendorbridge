@@ -26,6 +26,10 @@ const userSchema = new mongoose.Schema(
       enum: ['admin', 'officer', 'manager', 'vendor'],
       default: 'officer',
     },
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
+    },
     vendorProfile: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Vendor',

@@ -6,6 +6,7 @@ const vendorRoutes = require("./routes/vendor.routes");
 const RFQRoutes = require("./routes/rfq.routes");
 const QuotationRoutes = require("./routes/quotation.routes");
 const NotificationRoutes = require("./routes/notification.routes");
+const UserRoutes = require("./routes/user.routes");
 
 const app = express();
 
@@ -26,5 +27,6 @@ app.use("/api/vendors", vendorRoutes);
 app.use("/api/rfq", RFQRoutes);
 app.use("/api/quotations", QuotationRoutes);
 app.use("/api/notifications", NotificationRoutes);
+app.use('/api/users', UserRoutes);
 
 module.exports = app;

@@ -1,6 +1,10 @@
-const User = require('../models/User.model');
-const { generateAccessToken, generateRefreshToken } = require('../utils/generateTokens');
-const jwt = require('jsonwebtoken');
+const User = require("../models/User.model");
+const {
+  generateAccessToken,
+  generateRefreshToken,
+} = require("../utils/generateTokens");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 
 // @desc    Login user
 // @route   POST /api/auth/login
@@ -11,24 +15,28 @@ const login = async (req, res) => {
 
     // Basic validation
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
+      return res
+        .status(400)
+        .json({ message: "Email and password are required" });
     }
 
     // Find user and explicitly select password
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select("+password");
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
     // Check if account is active
     if (!user.isActive) {
-      return res.status(403).json({ message: 'Account is deactivated. Contact admin.' });
+      return res
+        .status(403)
+        .json({ message: "Account is deactivated. Contact admin." });
     }
 
     // Compare password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
     // Generate tokens
@@ -40,25 +48,26 @@ const login = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     // Send refresh token as httpOnly cookie
-    res.cookie('refreshToken', refreshToken, {
+    res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
     });
 
     res.status(200).json({
-      message: 'Login successful',
+      message: "Login successful",
       accessToken,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
+        mustChangePassword: user.mustChangePassword,
       },
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
@@ -69,16 +78,16 @@ const refreshToken = async (req, res) => {
   try {
     const token = req.cookies.refreshToken;
     if (!token) {
-      return res.status(401).json({ message: 'No refresh token' });
+      return res.status(401).json({ message: "No refresh token" });
     }
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 
     // Find user and check token matches
-    const user = await User.findById(decoded.id).select('+refreshToken');
+    const user = await User.findById(decoded.id).select("+refreshToken");
     if (!user || user.refreshToken !== token) {
-      return res.status(403).json({ message: 'Invalid refresh token' });
+      return res.status(403).json({ message: "Invalid refresh token" });
     }
 
     // Issue new access token
@@ -86,7 +95,7 @@ const refreshToken = async (req, res) => {
 
     res.status(200).json({ accessToken });
   } catch (error) {
-    res.status(403).json({ message: 'Invalid or expired refresh token' });
+    res.status(403).json({ message: "Invalid or expired refresh token" });
   }
 };
 
@@ -103,19 +112,19 @@ const logout = async (req, res) => {
     // Clear refresh token from DB
     await User.findOneAndUpdate(
       { refreshToken: token },
-      { refreshToken: null }
+      { refreshToken: null },
     );
 
     // Clear cookie
-    res.clearCookie('refreshToken', {
+    res.clearCookie("refreshToken", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
     });
 
-    res.status(200).json({ message: 'Logged out successfully' });
+    res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
@@ -124,11 +133,50 @@ const logout = async (req, res) => {
 // @access  Private
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-passwordResetToken -passwordResetExpiry');
+    const user = await User.findById(req.user.id).select(
+      "-passwordResetToken -passwordResetExpiry",
+    );
     res.status(200).json({ user });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-module.exports = { login, refreshToken, logout, getMe };
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Password is missing' });
+    }
+    const user = await User.findById(req.user._id).select("+password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User Not Found" });
+    }
+
+    if (!(await user.comparePassword(currentPassword))) {
+      return res
+        .status(401)
+        .json({ message: "Password Not matched. Access Denied" });
+    }
+
+    user.password = newPassword;
+    user.mustChangePassword = false;
+
+    await user.save();
+
+    return res.status(200).json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+module.exports = { login, refreshToken, logout, getMe, changePassword };
