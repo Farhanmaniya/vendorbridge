@@ -225,10 +225,69 @@ const updateRFQ = async (req, res) => {
   }
 };
 
+const uploadAttachment = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const rfq = await RFQ.findById(id);
+    if (!rfq) {
+      return res.status(404).json({ message: "RFQ Not Found" });
+    }
+
+    if (rfq.status !== "draft") {
+      return res.status(400).json({ message: "Access Denied" });
+    }
+
+    const { label, url } = req.body;
+    if (!label || !url) {
+      return res.status(400).json({ message: "Url and Label is missing" });
+    }
+
+    const newDoc = { label: label, url: url };
+    const updatedDocument = await RFQ.findByIdAndUpdate(
+      id,
+      { $push: { attachments: newDoc } },
+      { new: true },
+    );
+
+    return res
+      .status(201)
+      .json({ message: "document Uploaded successfully", updatedDocument });
+  } catch (error) {
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+const deleteAttachment = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const attachmentId = req.params.attachmentId;
+
+    const RFQ = await RFQ.findById(id);
+
+    if (!rfq) {
+      return res.status(404).json({ message: 'RFQ Not Found' });
+    }
+
+    const deletedDocument = await RFQ.findByIdAndUpdate(
+      id,
+      { $pull: { attachments: {
+        _id: attachmentId
+      }}},
+      { new: true},
+    );
+
+    return res.status(200).json({ message: "Document Deleted Successfully", deletedDocument});
+  } catch (error) {
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
 module.exports = {
   createRFQ,
   getAllRFQs,
   getRFQById,
   updateRFQStatus,
   updateRFQ,
+  uploadAttachment,
+  deleteAttachment,
 };

@@ -6,6 +6,21 @@ const itemSchema = new mongoose.Schema({
   unit: { type: String, required: true },
 });
 
+const attachmentSchema = new mongoose.Schema({
+  label: {
+    type: String,
+    required: true,
+  },
+  url: {
+    type: String,
+    required: true,
+  },
+  uploadedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
 const vendorStatusSchema = new mongoose.Schema({
   vendor: {
     type: mongoose.Schema.Types.ObjectId,
@@ -18,56 +33,60 @@ const vendorStatusSchema = new mongoose.Schema({
   },
 });
 
-const rfqSchema = new mongoose.Schema({
-  rfqNumber: {
-    type: String,
-    unique: true,
-  },
+const rfqSchema = new mongoose.Schema(
+  {
+    rfqNumber: {
+      type: String,
+      unique: true,
+    },
 
-  budget: {
-    type: Number,
-  },
+    budget: {
+      type: Number,
+    },
 
-  deadline: {
-    type: Date,
-    required: true,
-  },
+    deadline: {
+      type: Date,
+      required: true,
+    },
 
-  status: {
-    type: String,
-    enum: ["draft", "published", "closed", "awarded", "cancelled"],
-    default: "draft",
-  },
+    status: {
+      type: String,
+      enum: ["draft", "published", "closed", "awarded", "cancelled"],
+      default: "draft",
+    },
 
-  category: {
-    type: String,
-    enum: [
-      "IT",
-      "Office Supplies",
-      "Logistics",
-      "Manufacturing",
-      "Services",
-      "Other",
-    ],
-    trim: true,
-  },
+    category: {
+      type: String,
+      enum: [
+        "IT",
+        "Office Supplies",
+        "Logistics",
+        "Manufacturing",
+        "Services",
+        "Other",
+      ],
+      trim: true,
+    },
 
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
 
-  vendors: [vendorStatusSchema],
-  items: [itemSchema],
-}, {
+    vendors: [vendorStatusSchema],
+    items: [itemSchema],
+    attachments: [attachmentSchema],
+  },
+  {
     timestamps: true,
-});
+  },
+);
 
-rfqSchema.pre('save', async function() {
-    if(!this.isNew) return;
-    const totalDoc = await RFQ.countDocuments() + 1;
-    this.rfqNumber = `RFQ-${new Date().getFullYear()}-${String(totalDoc).padStart(3, '0')}`;
+rfqSchema.pre("save", async function () {
+  if (!this.isNew) return;
+  const totalDoc = (await RFQ.countDocuments()) + 1;
+  this.rfqNumber = `RFQ-${new Date().getFullYear()}-${String(totalDoc).padStart(3, "0")}`;
 });
 
 const RFQ = mongoose.model("RFQ", rfqSchema);
