@@ -3,6 +3,8 @@ const Quotation = require("../models/Quotation.model");
 const Vendor = require("../models/Vendor.model");
 const RFQ = require("../models/RFQ.model");
 const Notification = require("../models/Notification.model");
+const PurchaseOrder = require("../models/PurchaseOrder.model");
+const logAction = require("../utils/createAuditLog");
 
 const validTransitions = {
   submitted: { allowedNext: ["reviewed"], allowedRoles: ["officer"] },
@@ -123,13 +125,19 @@ const getQuotationById = async (req, res) => {
 const getQuotationsByRFQ = async (req, res) => {
   try {
     const rfqId = req.params.rfqId;
-    const quotations = await Quotation.find({ rfqId: rfqId })
+    let query = { rfqId: rfqId };
+
+    if (req.user.role === "vendor") {
+      const vendor = await Vendor.findOne({ userId: req.user.id });
+      if (!vendor) {
+        return res.status(404).json({ message: "Vendor profile not found" });
+      }
+      query.vendorId = vendor._id;
+    }
+
+    const quotations = await Quotation.find(query)
       .populate("rfqId", "budget status category createdBy")
       .populate("vendorId", "companyName contactPerson");
-
-    if (quotations.length === 0) {
-      return res.status(404).json({ message: "Quotation Not Found" });
-    }
 
     return res
       .status(200)
@@ -148,6 +156,7 @@ const updateQuotationStatus = async (req, res) => {
     if (!quotation) {
       return res.status(404).json({ message: "Quotation Not Found" });
     }
+    const currentStatus = quotation.status;
 
     const transition = validTransitions[quotation.status];
     if (!transition) {
@@ -177,11 +186,28 @@ const updateQuotationStatus = async (req, res) => {
       const winningVendor = await Vendor.findById(quotation.vendorId);
 
       // update RFQ status, capture result so we can use rfqNumber in messages
+      const oldStatusRFQ = await RFQ.findOne(
+        {_id: quotation.rfqId},
+        {"status": 1, "_id": 0},
+      )
       const updatedRFQ = await RFQ.findByIdAndUpdate(
         quotation.rfqId,
         { status: "awarded" },
         { new: true },
       );
+      try {
+        await logAction({
+          performedBy: req.user._id,
+          performedByRole: req.user.role,
+          action: "RFQ Awarded",
+          oldValue: oldStatusRFQ.status,
+          newValue: "awarded",
+          relatedId: updatedRFQ._id,
+          relatedModel: "RFQ",
+        });
+      } catch (logError) {
+        console.error("AuditLog Failed", logError.message);
+      }
 
       // build rejected notifications, matching each quotation to its vendor
       const notificationsRejected = rejectedQuotations.map((q) => {
@@ -215,6 +241,57 @@ const updateQuotationStatus = async (req, res) => {
       // save this quotation as accepted
       quotation.status = "accepted";
       await quotation.save();
+      try {
+        await logAction({
+          performedBy: req.user._id,
+          performedByRole: req.user.role,
+          action: "Quotation Accepted",
+          oldValue: currentStatus,
+          newValue: "accepted",
+          relatedId: quotation._id,
+          relatedModel: "Quotation",
+        });
+      } catch (logError) {
+        console.error("AuditLog Failed", logError.message);
+      }
+
+      // Generate draft Purchase Order automatically
+      const poItems = quotation.items.map((qItem) => {
+        const rfqItem = updatedRFQ.items.find(
+          (ri) => ri._id.toString() === qItem.itemId.toString()
+        );
+        return {
+          name: rfqItem ? rfqItem.name : "Unknown Item",
+          quantity: rfqItem ? rfqItem.quantity : 0,
+          unit: rfqItem ? rfqItem.unit : "pcs",
+          pricePerUnit: qItem.pricePerUnit,
+          totalPrice: qItem.totalPrice,
+        };
+      });
+
+      const purchaseOrder = await PurchaseOrder.create({
+        rfqId: quotation.rfqId,
+        quotationId: quotation._id,
+        vendorId: quotation.vendorId,
+        items: poItems,
+        grandTotal: quotation.grandTotal,
+        status: "draft",
+        createdBy: req.user._id,
+      });
+
+      try {
+        await logAction({
+          performedBy: req.user._id,
+          performedByRole: req.user.role,
+          action: "Purchase Order Created",
+          oldValue: null,
+          newValue: purchaseOrder.poNumber,
+          relatedId: purchaseOrder._id,
+          relatedModel: "PurchaseOrder",
+        });
+      } catch (logError) {
+        console.error("AuditLog Failed for PO Creation", logError.message);
+      }
 
       // send all notifications in one call
       await Notification.insertMany([
@@ -224,10 +301,24 @@ const updateQuotationStatus = async (req, res) => {
 
       return res
         .status(200)
-        .json({ message: "Successfully Completed", quotation });
+        .json({ message: "Successfully Completed", quotation, purchaseOrder });
     } else {
       quotation.status = newStatus;
       await quotation.save();
+      const properties = {
+        performedBy: req.user._id,
+        performedByRole: req.user.role,
+        action: "Quotation Status Changed",
+        oldValue: currentStatus,
+        newValue: newStatus,
+        relatedId: quotation._id,
+        relatedModel: "Quotation",
+      };
+      try {
+        await logAction(properties);
+      } catch (logError) {
+        console.error("Audit log failed:", logError.message);
+      }
       return res
         .status(200)
         .json({ message: "Successfully Completed", quotation });

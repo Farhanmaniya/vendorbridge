@@ -9,7 +9,7 @@ const {
 } = require("../controllers/quotation.controller");
 
 router.post('/', verifyJWT, authorizeRoles('vendor'), createOrUpdateQuotation);
-router.get('/rfq/:rfqId', verifyJWT, authorizeRoles('officer', 'manager'), getQuotationsByRFQ);
+router.get('/rfq/:rfqId', verifyJWT, authorizeRoles('officer', 'manager', 'vendor'), getQuotationsByRFQ);
 router.get('/:id', verifyJWT, authorizeRoles('officer', 'manager', 'vendor'), getQuotationById);
 router.patch('/:id/status', verifyJWT, authorizeRoles('officer', 'manager'), updateQuotationStatus);
 

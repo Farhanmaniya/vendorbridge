@@ -1,12 +1,13 @@
 const User = require("../models/User.model");
 const crypto = require("crypto");
 const sendEmail = require("../utils/sendEmail");
+const logAction = require('../utils/createAuditLog');
 
 const createUser = async (req, res) => {
   try {
     const { name, email, role } = req.body;
 
-    if (!["officer", "manager"].includes(role)) {
+    if (!["officer", "manager", "vendor"].includes(role)) {
       return res.status(400).json({ message: "This Role is not Allowed" });
     }
 
@@ -73,12 +74,27 @@ const updateUserRole = async (req, res) => {
     if (!user || !["officer", "manager"].includes(user.role)) {
       return res.status(404).json({ message: "User Not Found" });
     }
+    const oldUserValue = user.role;
 
     const updatedUser = await User.findByIdAndUpdate(
       id,
       { role: newRole },
       { new: true },
     );
+
+    try {
+      await logAction({
+        performedBy: req.user._id,
+        performedByRole: req.user.role,
+        action: "User Role Changed",
+        oldValue: oldUserValue,
+        newValue: updatedUser.role,
+        relatedId: user._id,
+        relatedModel: 'User',
+      });
+    } catch (logError) {
+      console.error('AuditLog Failed', logError.message);
+    }
     return res.status(200).json({ updatedUser });
   } catch (error) {
     return res.status(500).json({ message: "Internal Server Error" });
@@ -90,9 +106,10 @@ const toggleUserStatus = async (req, res) => {
     const id = req.params.id;
     const user = await User.findById(id);
 
-    if (!user || !["officer", "manager"].includes(user.role)) {
+    if (!user || !["officer", "manager", "vendor"].includes(user.role)) {
       return res.status(404).json({ message: "User Not Found" });
     }
+    const oldStatus = user.isActive == true ? 'Active' : 'InActive'
 
     const updatedUser = await User.findByIdAndUpdate(
       id,
@@ -100,6 +117,19 @@ const toggleUserStatus = async (req, res) => {
       { new: true },
     );
 
+    try {
+      await logAction({
+        performedBy: req.user._id,
+        performedByRole: req.user.role,
+        action: "User Status Changed",
+        oldValue: oldStatus,
+        newValue: updatedUser.isActive == true ? 'Active' : 'InActive',
+        relatedId: user._id,
+        relatedModel: 'User',
+      });
+    } catch (logError) {
+      console.error('AuditLog Failed', logError.message);
+    }
     return res.status(200).json({ updatedUser });
   } catch (error) {
     return res.status(500).json({ message: "Internal Server Error" });

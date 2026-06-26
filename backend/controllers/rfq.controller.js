@@ -2,6 +2,7 @@ const Vendor = require("../models/Vendor.model");
 const RFQ = require("../models/RFQ.model");
 const User = require("../models/User.model");
 const Notification = require("../models/Notification.model");
+const logAction = require("../utils/createAuditLog");
 
 const validTransitions = {
   draft: {
@@ -52,10 +53,19 @@ const createRFQ = async (req, res) => {
   }
 };
 
-// GET / -> admin, officer, manager
+// GET / -> admin, officer, manager, vendor
 const getAllRFQs = async (req, res) => {
   try {
-    const allRFQs = await RFQ.find()
+    let query = {};
+    if (req.user.role === "vendor") {
+      const vendor = await Vendor.findOne({ userId: req.user.id });
+      if (!vendor) {
+        return res.status(200).json({ allRFQs: [] });
+      }
+      query = { "vendors.vendor": vendor._id };
+    }
+
+    const allRFQs = await RFQ.find(query)
       .populate("createdBy", " name email")
       .populate(
         "vendors.vendor",
@@ -86,9 +96,13 @@ const getRFQById = async (req, res) => {
 
     // check for vendor roles that allowed to view RFQ or not
     if (req.user.role === "vendor") {
-      // this checked vendors is allowed or not
+      const vendor = await Vendor.findOne({ userId: req.user.id });
+      if (!vendor) {
+        return res.status(403).json({ message: "Access Denied" });
+      }
+
       const isAllowed = rfqs.vendors.some(
-        (v) => v.vendor.toString() === req.user._id.toString(),
+        (v) => (v.vendor?._id || v.vendor).toString() === vendor._id.toString()
       );
       if (!isAllowed) {
         return res.status(403).json({ message: "Access Denied" });
@@ -126,11 +140,28 @@ const updateRFQStatus = async (req, res) => {
         return res.status(403).json({ message: "Access Denied" });
       }
     }
+
     const updatedRFQ = await RFQ.findByIdAndUpdate(
       id,
       { status: newStatus },
       { new: true },
     );
+
+    const properties = {
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      action: "RFQ Status Changed",
+      oldValue: currentStatus,
+      newValue: newStatus,
+      relatedId: rfq._id,
+      relatedModel: "RFQ",
+    };
+
+    try {
+      await logAction(properties);
+    } catch (logError) {
+      console.log("Audit log failed:", logError.message);
+    }
 
     if (newStatus === "published") {
       const vendorIds = rfq.vendors.map((v) => v.vendor);
@@ -188,6 +219,7 @@ const updateRFQStatus = async (req, res) => {
         await Notification.insertMany(notificationsVendor);
       }
     }
+
     return res.status(200).json({ message: "Status changed", updatedRFQ });
   } catch (error) {
     return res.status(500).json({ message: "Internal Server Error" });
@@ -265,20 +297,26 @@ const deleteAttachment = async (req, res) => {
     const RFQ = await RFQ.findById(id);
 
     if (!rfq) {
-      return res.status(404).json({ message: 'RFQ Not Found' });
+      return res.status(404).json({ message: "RFQ Not Found" });
     }
 
     const deletedDocument = await RFQ.findByIdAndUpdate(
       id,
-      { $pull: { attachments: {
-        _id: attachmentId
-      }}},
-      { new: true},
+      {
+        $pull: {
+          attachments: {
+            _id: attachmentId,
+          },
+        },
+      },
+      { new: true },
     );
 
-    return res.status(200).json({ message: "Document Deleted Successfully", deletedDocument});
+    return res
+      .status(200)
+      .json({ message: "Document Deleted Successfully", deletedDocument });
   } catch (error) {
-    return res.status(500).json({ message: 'Internal Server Error' });
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 

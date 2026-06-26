@@ -1,5 +1,6 @@
 const Vendor = require("../models/Vendor.model");
 const User = require("../models/User.model");
+const logACtion = require('../utils/createAuditLog');
 
 const createVendor = async (req, res) => {
   try {
@@ -153,16 +154,32 @@ const updateVendorStatus = async (req, res) => {
     const status = req.body.status;
 
     const vendor = await Vendor.findById(id);
-    if (!vendor) {
+    if (!vendor) {  
       return res.status(404).json({ message: "user not found" });
     }
 
+    const vendorOldStatus = vendor.status;
     const updatedStatus = await Vendor.findByIdAndUpdate(
       id,
       { status },
       { new: true },
     );
 
+    const properties = {
+      performedBy: req.user._id,
+      performedByRole: req.user.role,
+      action: "Vendor Status Changed",
+      oldValue: vendorOldStatus,
+      newValue: status,
+      relatedId: vendor._id,
+      relatedModel: 'Vendor',
+    };
+
+    try {
+      await logAction(properties);
+    } catch (logError) {
+      console.error('AuditLog Failed', logError.message);
+    }
     return res
       .status(200)
       .json({ message: "Status changed successfully", updatedStatus });

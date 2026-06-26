@@ -16,7 +16,7 @@ const {
 router.post("/", verifyJWT, authorizeRoles("admin"), createVendor);
 
 // Get route to get all vendors as admin
-router.get("/", verifyJWT, authorizeRoles("admin"), getAllVendors);
+router.get("/", verifyJWT, authorizeRoles("admin", "officer", "manager"), getAllVendors);
 
 // Get route to get specific vendor based on id as admin or user
 router.get("/:id", verifyJWT, authorizeRoles("admin", "vendor"), getVendorById);

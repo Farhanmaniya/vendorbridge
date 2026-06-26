@@ -8,6 +8,9 @@ const QuotationRoutes = require("./routes/quotation.routes");
 const NotificationRoutes = require("./routes/notification.routes");
 const UserRoutes = require("./routes/user.routes");
 const DashboardRoutes = require('./routes/dashboard.routes');
+const AuditLogsRoutes = require('./routes/auditLogs.routes');
+const PurchaseOrderRoutes = require('./routes/purchaseOrder.routes');
+const InvoiceRoutes = require('./routes/invoice.routes');
 
 const app = express();
 
@@ -30,5 +33,8 @@ app.use("/api/quotations", QuotationRoutes);
 app.use("/api/notifications", NotificationRoutes);
 app.use('/api/users', UserRoutes);
 app.use('/api/dashboard', DashboardRoutes);
+app.use('/api/audit-logs', AuditLogsRoutes);
+app.use('/api/purchase-orders', PurchaseOrderRoutes);
+app.use('/api/invoices', InvoiceRoutes);
 
 module.exports = app;

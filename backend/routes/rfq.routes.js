@@ -12,7 +12,7 @@ const {
 } = require("../controllers/rfq.controller");
 
 router.post('/', verifyJWT, authorizeRoles("officer"), createRFQ);
-router.get('/', verifyJWT, authorizeRoles("admin", "officer", "manager"), getAllRFQs);
+router.get('/', verifyJWT, authorizeRoles("admin", "officer", "manager", "vendor"), getAllRFQs);
 router.get('/:id', verifyJWT, getRFQById);
 router.patch('/:id/status', verifyJWT, authorizeRoles('manager', 'officer'), updateRFQStatus);
 router.put('/:id', verifyJWT, authorizeRoles("officer"), updateRFQ);
